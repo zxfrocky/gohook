@@ -81,6 +81,9 @@ type Event struct {
 	X int16 `json:"x"`
 	Y int16 `json:"y"`
 
+	//X_Abs int16 `json:"x_abs"`
+	//Y_Abs int16 `json:"y_abs"`
+
 	Amount    uint16 `json:"amount"`
 	Rotation  int32  `json:"rotation"`
 	Direction uint8  `json:"direction"`

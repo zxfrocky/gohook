@@ -449,6 +449,75 @@ static void process_mouse_moved(MSLLHOOKSTRUCT *mshook) {
 	}
 }
 
+static void process_delta_mouse_moved(LPARAM lParam) {
+	 // 获取原始输入数据
+        UINT size = 0;
+        HRAWINPUT hRawInput = (HRAWINPUT)lParam;
+
+        // 第一次调用：获取数据大小
+        if (GetRawInputData(hRawInput, RID_INPUT, 0, &size, sizeof(RAWINPUTHEADER)) == -1) {
+            logger(LOG_LEVEL_ERROR, "%s [%u]: GetRawInputData failed to get size. (%lu)",
+                   __FUNCTION__, __LINE__, GetLastError());
+            return;
+        }
+
+        // 分配内存
+        LPBYTE *data = malloc(size);
+        //LPBYTE data = new BYTE[size];
+        if (data == 0) {
+            logger(LOG_LEVEL_ERROR, "%s [%u]: Memory allocation failed for raw input data.",
+                   __FUNCTION__, __LINE__);
+            return;
+        }
+
+        // 第二次调用：提取数据
+        if (GetRawInputData(hRawInput, RID_INPUT, data, &size, sizeof(RAWINPUTHEADER)) != size) {
+            logger(LOG_LEVEL_ERROR, "%s [%u]: GetRawInputData failed to read data. (%lu)",
+                   __FUNCTION__, __LINE__, GetLastError());
+            //delete[] data;
+            free(data);
+            return;
+        }
+
+        RAWINPUT* raw = (RAWINPUT*)data;
+        if (raw->header.dwType == RIM_TYPEMOUSE) {
+            // 提取相对移动量
+            int deltaX = raw->data.mouse.lLastX;
+            int deltaY = raw->data.mouse.lLastY;
+
+            // 若为相对移动模式（标准鼠标）
+            if ((raw->data.mouse.usFlags & MOUSE_MOVE_RELATIVE) == MOUSE_MOVE_RELATIVE) {
+                // 构造鼠标移动事件（相对量）
+                iohook_event event = {0};
+                event.time = GetMessageTime();  // 或用 GetTickCount() 替代
+                event.type = EVENT_MOUSE_MOVED;
+                event.mask = get_modifiers();   // 从现有代码获取修饰键状态
+
+                // 此处需注意：原代码用绝对坐标，此处改为相对量
+                // 根据需求可调整字段或新增 event.data.mouse.deltaX/deltaY
+                event.data.mouse.x = deltaX;    // 相对 X 移动量
+                event.data.mouse.y = deltaY;    // 相对 Y 移动量
+
+                // 可选：记录绝对坐标（如果需要）
+                /*
+                POINT pt;
+                GetCursorPos(&pt);              // 获取当前光标位置
+                event.data.mouse.x_abs = pt.x;  // 假设数据结构支持
+                event.data.mouse.y_abs = pt.y;
+                */
+                // 发送事件
+                dispatch_event(&event);
+
+                logger(LOG_LEVEL_DEBUG, "%s [%u]: Mouse moved (Relative): ΔX=%d, ΔY=%d",
+                       __FUNCTION__, __LINE__, deltaX, deltaY);
+            }
+        }
+
+        //delete[] data;
+        free(data);
+        return;
+	}
+
 static void process_mouse_wheel(MSLLHOOKSTRUCT *mshook, uint8_t direction) {
 	// Track the number of clicks.
 	// Reset the click count and previous button.
@@ -570,8 +639,11 @@ LRESULT CALLBACK mouse_hook_event_proc(int nCode, WPARAM wParam, LPARAM lParam) 
 			break;
 
 		case WM_MOUSEMOVE:
-			process_mouse_moved(mshook);
+			//process_mouse_moved(mshook);
 			break;
+		case WM_INPUT:
+		    process_delta_mouse_moved(lParam);
+		    break;
 
 		case WM_MOUSEWHEEL:
 			process_mouse_wheel(mshook, WHEEL_VERTICAL_DIRECTION);
