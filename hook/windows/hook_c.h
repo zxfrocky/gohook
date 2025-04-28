@@ -744,6 +744,21 @@ IOHOOK_API int hook_run() {
 	keyboard_event_hhook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboard_hook_event_proc, hInst, 0);
 	mouse_event_hhook = SetWindowsHookEx(WH_MOUSE_LL, mouse_hook_event_proc, hInst, 0);
 
+	// 新增代码：注册 Raw Input 设备（鼠标） ---------- 开始
+    RAWINPUTDEVICE rid;
+    rid.usUsagePage = 0x01;          // HID_USAGE_PAGE_GENERIC
+    rid.usUsage = 0x02;              // HID_USAGE_GENERIC_MOUSE
+    rid.dwFlags = RIDEV_INPUTSINK;   // 即使窗口不活动也接收输入
+    rid.hwndTarget = hInst;           // 目标窗口句柄（需确保 hWnd 有效）
+
+    if (!RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
+        logger(LOG_LEVEL_ERROR, "%s [%u]: RegisterRawInputDevices failed! (%lu)",
+               __FUNCTION__, __LINE__, GetLastError());
+        status = IOHOOK_ERROR_RAW_INPUT_REGISTER;
+        goto cleanup;
+    }
+    // 新增代码：注册 Raw Input 设备（鼠标） ---------- 结束
+
 	// Create a window event hook to listen for capture change.
 	win_event_hhook = SetWinEventHook(
 			EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_NAMECHANGE,
@@ -785,7 +800,7 @@ IOHOOK_API int hook_run() {
 		status = IOHOOK_ERROR_SET_WINDOWS_HOOK_EX;
 	}
 
-
+cleanup:
 	// Unregister any hooks that may still be installed.
 	unregister_running_hooks();
 
